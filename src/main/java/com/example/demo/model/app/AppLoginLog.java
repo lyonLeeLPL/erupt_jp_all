@@ -5,7 +5,11 @@ import xyz.erupt.annotation.EruptField;
 import xyz.erupt.annotation.sub_field.Edit;
 import xyz.erupt.annotation.sub_field.EditType;
 import xyz.erupt.annotation.sub_field.View;
+import xyz.erupt.annotation.sub_field.ViewType;
+import xyz.erupt.annotation.sub_field.sub_edit.ChoiceType;
+import xyz.erupt.annotation.sub_field.sub_edit.DateType;
 import xyz.erupt.annotation.sub_field.sub_edit.Search;
+import xyz.erupt.annotation.sub_field.sub_edit.VL;
 import xyz.erupt.jpa.model.BaseModel;
 
 import jakarta.persistence.Entity;
@@ -20,10 +24,13 @@ public class AppLoginLog extends BaseModel {
     @EruptField(views = @View(title = "账号", sortable = true), edit = @Edit(title = "账号", search = @Search))
     private String username;
 
-    @EruptField(views = @View(title = "登录时间", sortable = true), edit = @Edit(title = "登录时间", search = @Search(vague = true)))
+    @EruptField(views = @View(title = "登录时间", type = ViewType.DATE_TIME), edit = @Edit(title = "登录时间", type = EditType.DATE, dateType = @DateType(type = DateType.Type.DATE_TIME)))
     private Date loginTime;
 
-    @EruptField(views = @View(title = "平台"), edit = @Edit(title = "平台", search = @Search, type = EditType.CHOICE))
+    @EruptField(views = @View(title = "平台"), edit = @Edit(title = "平台", type = EditType.CHOICE, choiceType = @ChoiceType(vl = {
+            @VL(value = "Android", label = "Android"),
+            @VL(value = "iOS", label = "iOS")
+    })))
     private String platform;
 
     @EruptField(views = @View(title = "App版本"), edit = @Edit(title = "App版本", search = @Search))

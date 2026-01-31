@@ -6,8 +6,10 @@ import xyz.erupt.annotation.sub_field.Edit;
 import xyz.erupt.annotation.sub_field.EditType;
 import xyz.erupt.annotation.sub_field.View;
 import xyz.erupt.annotation.sub_field.ViewType;
+import xyz.erupt.annotation.sub_field.sub_edit.ChoiceType;
 import xyz.erupt.annotation.sub_field.sub_edit.DateType;
 import xyz.erupt.annotation.sub_field.sub_edit.Search;
+import xyz.erupt.annotation.sub_field.sub_edit.VL;
 import xyz.erupt.jpa.model.BaseModel;
 
 import jakarta.persistence.Entity;
@@ -34,7 +36,10 @@ public class AppOnlineUser extends BaseModel {
     @EruptField(views = @View(title = "地理位置"), edit = @Edit(title = "地理位置", search = @Search))
     private String region; // 国家|区域|省份|城市|ISP
 
-    @EruptField(views = @View(title = "平台"), edit = @Edit(title = "平台", type = EditType.CHOICE))
+    @EruptField(views = @View(title = "平台"), edit = @Edit(title = "平台", type = EditType.CHOICE, choiceType = @ChoiceType(vl = {
+            @VL(value = "Android", label = "Android"),
+            @VL(value = "iOS", label = "iOS")
+    })))
     private String platform;
 
     @EruptField(views = @View(title = "App版本"), edit = @Edit(title = "App版本", search = @Search))
