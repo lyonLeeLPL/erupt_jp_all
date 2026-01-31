@@ -7,11 +7,12 @@ erupt:
   # 是否开启csrf防御
   csrf-inspect: true
   # 是否开启redis方式存储session，默认false，开启后需在配置文件中添加redis配置（同 spring boot）
-  redis-session: true
+  redis-session: false
   # 附件上传存储路径, 默认路径为：/opt/erupt-attachment
   upload-path: C:/010_datas/erupt/attachment
   # 是否保留上传文件原始名称
   keep-upload-file-name: false
+  # 开启redis方式存储session，默认false，开启后需在配置文件中添加redis配置（同 Spring Boot）
   upms:
     # 登录session时长（redisSession为true时有效）
     expire-time-by-login: 60
@@ -26,24 +27,18 @@ magic-api:
   show-url: false
 
 spring:
+  #  redis:
+  #    host: 127.0.0.1
+  #    port: 6379
+  #    timeout: 10000
   datasource:
-    url: jdbc:h2:file:./erupt;AUTO_SERVER=TRUE;MODE=MySQL;CASE_INSENSITIVE_IDENTIFIERS=TRUE
-    driver-class-name: org.h2.Driver
+    url: jdbc:postgresql://192.168.1.225:5432/erupt_jp?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Tokyo
+    username: postgres
+    password: 5601564a
   jpa:
+    show-sql: true
     generate-ddl: true
-    database: h2
-    properties:
-      hibernate:
-        globally_quoted_identifiers: true
-        type.enumeration.use_named: false
-#  datasource:
-#    url: jdbc:mysql://localhost:3306/erupt-example?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
-#    username: root
-#    password: 12345678
-#  jpa:
-#    show-sql: true
-#    generate-ddl: true
-#    database: mysql
+    database: postgresql
   mail:
     username: xxxx@qq.com
     password: xxxxxxx
@@ -56,11 +51,6 @@ spring:
     multipart:
       max-file-size: 100MB
       max-request-size: 100MB
-  data:
-    redis:
-      host: 127.0.0.1
-      port: 6379
-      timeout: 10000
 
 server:
   # 启用 gzip 压缩

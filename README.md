@@ -1,9 +1,11 @@
+mvn clean package -DskipTests
+
 <p align="center"><img src="https://www.erupt.xyz/demo/erupt.svg" height="150" alt="logo"/></p>
 <h1 align="center"> Erupt Engine &nbsp; 🚀 &nbsp; Example </h1>
 <h3 align="center">零前端代码，几行 Java 注解，实现通用数据平台</h3>
 <h3 align="center"><a href="https://erupt.xyz" target="_blank">https://www.erupt.xyz</a></h3>
 
----
+---[erupt-jp-0.0.1-SNAPSHOT.jar](target/erupt-jp-0.0.1-SNAPSHOT.jar)
 
 <p align="center">
     <a href="https://www.erupt.xyz" target="_blank"><img src="https://img.shields.io/badge/Erupt-Framework-brightgreen" alt="Erupt Framework"></a>
