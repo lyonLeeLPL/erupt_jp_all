@@ -21,10 +21,66 @@ public class AppLoginController {
     @PersistenceContext
     private EntityManager entityManager;
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.example.demo.service.AppMonitorService appMonitorService;
+
     @PostMapping("/login")
-    public Map<String, Object> login(@RequestBody Map<String, String> loginMap) {
-        String username = loginMap.get("username");
-        String password = loginMap.get("password");
+    @jakarta.transaction.Transactional
+    public Map<String, Object> login(@RequestBody Map<String, Object> loginMap, HttpServletRequest request) {
+        String username = (String) loginMap.get("username");
+        String password = (String) loginMap.get("password");
+
+        // 版本检查
+        String platform = (String) loginMap.get("platform");
+        Object versionCodeObj = loginMap.get("versionCode");
+
+        Map<String, Object> upgradeInfo = null;
+
+        if (platform != null && versionCodeObj != null) {
+            try {
+                int versionCode = Integer.parseInt(versionCodeObj.toString());
+
+                // 查询最新版本
+                List<com.example.demo.model.app.AppVersion> versions = entityManager.createQuery(
+                        "from AppVersion v where v.platform = :platform and v.isActive = true order by v.versionCode desc",
+                        com.example.demo.model.app.AppVersion.class)
+                        .setParameter("platform", platform)
+                        .setMaxResults(1)
+                        .getResultList();
+
+                if (!versions.isEmpty()) {
+                    com.example.demo.model.app.AppVersion latest = versions.get(0);
+
+                    // 检查是否需要强制更新
+                    if (latest.getMinVersionCode() != null && versionCode < latest.getMinVersionCode()) {
+                        Map<String, Object> result = new HashMap<>();
+                        result.put("code", 426); // Upgrade Required
+                        result.put("msg", "当前版本过低，请升级到最新版本");
+                        Map<String, Object> data = new HashMap<>();
+                        data.put("upgradeType", "FORCE");
+                        data.put("latestVersion", latest.getVersionName());
+                        data.put("latestVersionCode", latest.getVersionCode());
+                        data.put("updateContent", latest.getUpdateContent());
+                        data.put("downloadUrl", latest.getDownloadUrl());
+                        result.put("data", data);
+                        return result;
+                    }
+
+                    // 检查是否有新版本（非强制）
+                    if (versionCode < latest.getVersionCode()) {
+                        upgradeInfo = new HashMap<>();
+                        upgradeInfo.put("upgradeType", "OPTIONAL");
+                        upgradeInfo.put("latestVersion", latest.getVersionName());
+                        upgradeInfo.put("latestVersionCode", latest.getVersionCode());
+                        upgradeInfo.put("updateContent", latest.getUpdateContent());
+                        upgradeInfo.put("downloadUrl", latest.getDownloadUrl());
+                    }
+                }
+            } catch (Exception e) {
+                // 版本检查出错不影响登录，但记录日志
+                e.printStackTrace();
+            }
+        }
 
         // 查询用户
         List<EruptUser> users = entityManager.createQuery(
@@ -60,8 +116,34 @@ public class AppLoginController {
         // 登录
         StpUtil.login(user.getId());
 
+        // 记录登录日志
+        try {
+            com.example.demo.model.app.AppLoginLog log = new com.example.demo.model.app.AppLoginLog();
+            log.setUsername(username);
+            log.setLoginTime(new java.util.Date());
+            log.setPlatform((String) loginMap.get("platform"));
+
+            // Handle version info safely
+            String vName = loginMap.containsKey("versionName") ? (String) loginMap.get("versionName") : "Unknown";
+            Object vCode = loginMap.get("versionCode");
+            log.setAppVersion(vName + (vCode != null ? " (" + vCode + ")" : ""));
+
+            // Handle device info
+            log.setDeviceModel(loginMap.containsKey("model") ? (String) loginMap.get("model") : "Unknown");
+            log.setOsVersion(loginMap.containsKey("osVersion") ? (String) loginMap.get("osVersion") : "Unknown");
+            log.setDeviceId(loginMap.containsKey("deviceId") ? (String) loginMap.get("deviceId") : "Unknown");
+
+            entityManager.persist(log);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
         // 获取 Token 信息
         SaTokenInfo tokenInfo = StpUtil.getTokenInfo();
+
+        // 更新在线状态
+        appMonitorService.updateOnlineStatus(user, tokenInfo.tokenValue,
+                com.example.demo.utils.IpUtils.getClientIp(request), loginMap);
 
         Map<String, Object> result = new HashMap<>();
         result.put("code", 200);
@@ -69,6 +151,9 @@ public class AppLoginController {
         result.put("accessToken", tokenInfo.tokenValue);
         result.put("refreshToken", tokenInfo.tokenValue); // Sa-Token 简单模式下 Access 即 Refresh，也可配置复杂模式
         result.put("user", user); // 返回用户信息
+        if (upgradeInfo != null) {
+            result.put("upgradeInfo", upgradeInfo);
+        }
 
         return result;
     }
