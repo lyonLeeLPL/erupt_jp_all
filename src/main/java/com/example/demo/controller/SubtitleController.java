@@ -1,45 +1,55 @@
 package com.example.demo.controller;
 
 import com.example.demo.model.subtitle.VideoInfoVO;
-import com.example.demo.utils.VttParser;
-import com.example.demo.utils.YtDlpExtraUtils;
+import com.example.demo.utils.SubtitleParser;
+import com.example.demo.utils.YouTubeApiUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.client.RestTemplate;
 
 import java.util.ArrayList;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @RestController
 @RequestMapping("/api/video")
 public class SubtitleController {
 
     @Autowired
-    private YtDlpExtraUtils ytDlpUtils;
+    private YouTubeApiUtils youTubeApiUtils;
 
     @Autowired
-    private VttParser vttParser;
+    private SubtitleParser subtitleParser;
 
     @GetMapping("/info")
     public VideoInfoVO getVideoInfo(@RequestParam("url") String url) {
         VideoInfoVO vo = new VideoInfoVO();
         try {
-            // 1. Get Metadata from yt-dlp
-            JsonNode meta = ytDlpUtils.getVideoInfo(url);
+            // Extract Video ID from URL
+            String videoId = extractVideoId(url);
+            if (videoId == null)
+                throw new RuntimeException("Invalid YouTube URL");
 
-            String videoId = meta.get("id").asText();
+            // 1. Get Metadata from YouTube API
+            JsonNode snippet = youTubeApiUtils.getVideoDetails(videoId).get("snippet");
+            JsonNode contentDetails = youTubeApiUtils.getVideoDetails(videoId).get("contentDetails");
+
             vo.setVideoId(videoId);
-            vo.setTitle(meta.get("title").asText());
-            vo.setDuration(meta.get("duration").asLong());
+            vo.setTitle(snippet.get("title").asText());
+            // Parse duration (PT21M3S) - Simplified for now or use library
+            vo.setDuration(0); // TODO: parse ISO8601 duration
 
-            // 2. Download VTT using yt-dlp (No more HTTP 429)
-            String vttContent = ytDlpUtils.downloadSubtitleContent(videoId, url);
+            // 2. Find Subtitle Track ID
+            String captionId = youTubeApiUtils.getCaptionId(videoId, "en");
 
-            // 3. Parse and Set
-            if (vttContent != null) {
-                vo.setSubtitles(vttParser.parse(vttContent));
+            // 3. Download & Parse
+            if (captionId != null) {
+                String vttContent = youTubeApiUtils.downloadCaption(captionId);
+                if (vttContent != null) {
+                    vo.setSubtitles(subtitleParser.parseVtt(vttContent));
+                }
             } else {
-                vo.setSubtitles(new ArrayList<>());
+                vo.setSubtitles(new ArrayList<>()); // No subtitles found
             }
 
         } catch (Exception e) {
@@ -49,6 +59,13 @@ public class SubtitleController {
         return vo;
     }
 
-    // findSubtitleUrl and getUrlFormat are no longer needed
-
+    private String extractVideoId(String url) {
+        String pattern = "(?<=watch\\?v=|/videos/|embed\\/|youtu.be\\/|\\/v\\/|\\/e\\/|watch\\?v%3D|watch\\?feature=player_embedded&v=|%2Fvideos%2F|embed%\u200C\u200B2F|youtu.be%2F|%2Fv%2F)[^#\\&\\?\\n]*";
+        Pattern compiledPattern = Pattern.compile(pattern);
+        Matcher matcher = compiledPattern.matcher(url);
+        if (matcher.find()) {
+            return matcher.group();
+        }
+        return null;
+    }
 }
