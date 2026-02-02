@@ -1,7 +1,7 @@
 package com.example.demo.controller;
 
 import com.example.demo.model.subtitle.VideoInfoVO;
-import com.example.demo.utils.SubtitleParser;
+import com.example.demo.utils.VttParser;
 import com.example.demo.utils.YtDlpExtraUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.beans.factory.annotation.Autowired;
