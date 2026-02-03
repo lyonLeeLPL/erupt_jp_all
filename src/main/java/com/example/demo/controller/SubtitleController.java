@@ -1,71 +1,176 @@
 package com.example.demo.controller;
 
+import com.example.demo.ExampleApplication;
 import com.example.demo.model.subtitle.VideoInfoVO;
-import com.example.demo.utils.SubtitleParser;
-import com.example.demo.utils.YouTubeApiUtils;
+import com.example.demo.utils.VttParser;
+import com.example.demo.utils.YtDlpExtraUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.ArrayList;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.logging.Logger;
 
 @RestController
 @RequestMapping("/api/video")
 public class SubtitleController {
+    private static final Logger logger = Logger.getLogger(ExampleApplication.class.getName());
 
     @Autowired
-    private YouTubeApiUtils youTubeApiUtils;
+    private YtDlpExtraUtils ytDlpUtils;
 
     @Autowired
-    private SubtitleParser subtitleParser;
+    private VttParser vttParser;
 
     @GetMapping("/info")
     public VideoInfoVO getVideoInfo(@RequestParam("url") String url) {
         VideoInfoVO vo = new VideoInfoVO();
         try {
-            // Extract Video ID from URL
-            String videoId = extractVideoId(url);
-            if (videoId == null)
-                throw new RuntimeException("Invalid YouTube URL");
+            // 1. Get Metadata
+            JsonNode meta = ytDlpUtils.getVideoInfo(url);
+            vo.setVideoId(meta.get("id").asText());
+            vo.setTitle(meta.get("title").asText());
+            vo.setDuration(meta.get("duration").asLong());
 
-            // 1. Get Metadata from YouTube API
-            JsonNode snippet = youTubeApiUtils.getVideoDetails(videoId).get("snippet");
-            JsonNode contentDetails = youTubeApiUtils.getVideoDetails(videoId).get("contentDetails");
+            // 2. Download VTT
+            java.io.File vttFile = ytDlpUtils.downloadSubtitle(url, meta);
 
-            vo.setVideoId(videoId);
-            vo.setTitle(snippet.get("title").asText());
-            // Parse duration (PT21M3S) - Simplified for now or use library
-            vo.setDuration(0); // TODO: parse ISO8601 duration
+            // 3. Parse and Set Raw Content
+            // Need to reload file list because yt-dlp might have downloaded multiple
+            String tempDir = System.getProperty("java.io.tmpdir") + java.io.File.separator + "sublingo";
+            java.io.File dir = new java.io.File(tempDir);
+            String videoId = vo.getVideoId();
 
-            // 2. Find Subtitle Track ID
-            String captionId = youTubeApiUtils.getCaptionId(videoId, "en");
+            if (dir.exists()) {
+                // Scan all VTT files for this video
+                java.io.File[] files = dir.listFiles((d, name) -> name.startsWith(videoId) && name.endsWith(".vtt"));
 
-            // 3. Download & Parse
-            if (captionId != null) {
-                String vttContent = youTubeApiUtils.downloadCaption(captionId);
-                if (vttContent != null) {
-                    vo.setSubtitles(subtitleParser.parseVtt(vttContent));
+                java.io.File bestSource = null;
+                java.io.File bestTarget = null;
+
+                if (files != null) {
+                    for (java.io.File f : files) {
+                        String name = f.getName();
+                        // Extract lang: videoId.LANG.vtt
+                        String suffix = name.substring(videoId.length());
+                        if (suffix.startsWith("."))
+                            suffix = suffix.substring(1);
+
+                        String lang = suffix.replace(".vtt", "").toLowerCase();
+                        logger.info("Found VTT: " + name + " (Lang: " + lang + ")");
+
+                        // Pick Source (Priorty: ja > en)
+                        if (lang.startsWith("ja")) {
+                            bestSource = f;
+                        } else if (lang.startsWith("en")
+                                && (bestSource == null || !bestSource.getName().contains(".ja"))) {
+                            if (bestSource == null)
+                                bestSource = f;
+                        }
+
+                        // Pick Target (Priority: zh)
+                        if (lang.startsWith("zh")) {
+                            bestTarget = f;
+                        }
+                    }
                 }
+
+                // Lists for parsing
+                java.util.List<VideoInfoVO.SubtitleItemVO> sourceList = new ArrayList<>();
+                java.util.List<VideoInfoVO.SubtitleItemVO> targetList = new ArrayList<>();
+
+                if (bestSource != null) {
+                    logger.info("Parsing Source: " + bestSource.getName());
+                    sourceList = vttParser.parse(bestSource);
+                } else {
+                    logger.warning("No Source VTT found!");
+                }
+
+                if (bestTarget != null) {
+                    logger.info("Parsing Target: " + bestTarget.getName());
+                    targetList = vttParser.parse(bestTarget);
+                } else {
+                    logger.warning("No Target VTT found!");
+                }
+
+                // Merge Logic: Align Target to Source
+                if (!sourceList.isEmpty() && !targetList.isEmpty()) {
+                    logger.info("Merging subtitles...");
+                    for (VideoInfoVO.SubtitleItemVO sourceItem : sourceList) {
+                        long start1 = sourceItem.getStartTime();
+                        long end1 = sourceItem.getEndTime();
+
+                        // Find best matching target
+                        for (VideoInfoVO.SubtitleItemVO targetItem : targetList) {
+                            long start2 = targetItem.getStartTime();
+                            long end2 = targetItem.getEndTime();
+
+                            // Calc overlap
+                            long startOverlap = Math.max(start1, start2);
+                            long endOverlap = Math.min(end1, end2);
+                            long overlapCallback = endOverlap - startOverlap;
+
+                            // 500ms threshold
+                            if (overlapCallback > 500) {
+                                String existing = sourceItem.getTranslation();
+                                String newTrans = targetItem.getOriginal();
+
+                                if (existing == null || existing.isEmpty()) {
+                                    sourceItem.setTranslation(newTrans);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Generate Merged VTT Content
+                StringBuilder vttBuilder = new StringBuilder();
+                vttBuilder.append("WEBVTT\n\n");
+
+                for (VideoInfoVO.SubtitleItemVO item : sourceList) {
+                    vttBuilder.append(item.getIndex()).append("\n");
+                    vttBuilder.append(formatTime(item.getStartTime())).append(" --> ")
+                            .append(formatTime(item.getEndTime())).append("\n");
+                    vttBuilder.append(item.getOriginal()).append("\n");
+                    if (item.getTranslation() != null && !item.getTranslation().isEmpty()) {
+                        vttBuilder.append(item.getTranslation()).append("\n");
+                    }
+                    vttBuilder.append("\n");
+                }
+
+                String mergedContent = vttBuilder.toString();
+
+                // Save to file
+                try {
+                    java.io.File mergedFile = new java.io.File(dir, videoId + ".merged.vtt");
+                    java.nio.file.Files.writeString(mergedFile.toPath(), mergedContent,
+                            java.nio.charset.StandardCharsets.UTF_8);
+                    logger.info("Saved Merged VTT to: " + mergedFile.getAbsolutePath());
+                } catch (Exception e) {
+                    logger.warning("Failed to save merged VTT: " + e.getMessage());
+                }
+
+                vo.setSubtitles(sourceList);
+                vo.setRawVtt(mergedContent); // Return the merged VTT as raw
+                vo.setTranslationVtt(null);
             } else {
-                vo.setSubtitles(new ArrayList<>()); // No subtitles found
+                vo.setSubtitles(new ArrayList<>());
             }
 
         } catch (Exception e) {
             e.printStackTrace();
             throw new RuntimeException("Error processing video: " + e.getMessage());
         }
+
+        logger.info("success:" + vo.getTitle());
         return vo;
     }
 
-    private String extractVideoId(String url) {
-        String pattern = "(?<=watch\\?v=|/videos/|embed\\/|youtu.be\\/|\\/v\\/|\\/e\\/|watch\\?v%3D|watch\\?feature=player_embedded&v=|%2Fvideos%2F|embed%\u200C\u200B2F|youtu.be%2F|%2Fv%2F)[^#\\&\\?\\n]*";
-        Pattern compiledPattern = Pattern.compile(pattern);
-        Matcher matcher = compiledPattern.matcher(url);
-        if (matcher.find()) {
-            return matcher.group();
-        }
-        return null;
+    private String formatTime(long totalMs) {
+        long h = totalMs / 3600000;
+        long m = (totalMs % 3600000) / 60000;
+        long s = (totalMs % 60000) / 1000;
+        long ms = totalMs % 1000;
+        return String.format("%02d:%02d:%02d.%03d", h, m, s, ms);
     }
 }

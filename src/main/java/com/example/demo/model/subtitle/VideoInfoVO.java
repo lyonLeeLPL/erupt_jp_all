@@ -6,7 +6,25 @@ public class VideoInfoVO {
     private String videoId;
     private String title;
     private long duration; // seconds
+    private String rawVtt;
+    private String translationVtt;
     private List<SubtitleItemVO> subtitles;
+
+    public String getRawVtt() {
+        return rawVtt;
+    }
+
+    public void setRawVtt(String rawVtt) {
+        this.rawVtt = rawVtt;
+    }
+
+    public String getTranslationVtt() {
+        return translationVtt;
+    }
+
+    public void setTranslationVtt(String translationVtt) {
+        this.translationVtt = translationVtt;
+    }
 
     // Getters and Setters
     public String getVideoId() {
