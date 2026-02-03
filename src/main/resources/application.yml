@@ -4,6 +4,7 @@ erupt-app:
   # 登录失败几次，需要验证码
   verify-code-count: 2
 erupt:
+  youtube-path: C:\\010_datas\\youtube
   # 是否开启csrf防御
   csrf-inspect: true
   # 是否开启redis方式存储session，默认false，开启后需在配置文件中添加redis配置（同 spring boot）
@@ -53,6 +54,7 @@ spring:
       max-request-size: 100MB
 
 server:
+  port: 25080
   # 启用 gzip 压缩
   compression:
     mime-types: application/javascript,text/css,application/json,application/xml,text/html,text/xml,text/plain

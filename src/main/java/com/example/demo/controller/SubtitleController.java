@@ -6,6 +6,7 @@ import com.example.demo.utils.VttParser;
 import com.example.demo.utils.YtDlpExtraUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.ArrayList;
@@ -22,6 +23,9 @@ public class SubtitleController {
     @Autowired
     private VttParser vttParser;
 
+    @Value("${erupt.youtube-path}")
+    private String youtubePath;
+
     @GetMapping("/info")
     public VideoInfoVO getVideoInfo(@RequestParam("url") String url) {
         VideoInfoVO vo = new VideoInfoVO();
@@ -37,7 +41,7 @@ public class SubtitleController {
 
             // 3. Parse and Set Raw Content
             // Need to reload file list because yt-dlp might have downloaded multiple
-            String tempDir = System.getProperty("java.io.tmpdir") + java.io.File.separator + "sublingo";
+            String tempDir = youtubePath + java.io.File.separator + "sublingo";
             java.io.File dir = new java.io.File(tempDir);
             String videoId = vo.getVideoId();
 

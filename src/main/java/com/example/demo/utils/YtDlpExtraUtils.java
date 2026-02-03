@@ -2,6 +2,7 @@ package com.example.demo.utils;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.io.BufferedReader;
@@ -11,12 +12,15 @@ import java.util.concurrent.TimeUnit;
 
 @Component
 public class YtDlpExtraUtils {
-
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    @Value("${erupt.youtube-path}")
+    private String youtubePath;
+
     public JsonNode getVideoInfo(String url) throws Exception {
+
         // Command: yt-dlp --dump-json --skip-download [url]
-        ProcessBuilder pb = new ProcessBuilder("yt-dlp", "--dump-json", "--skip-download", url);
+        ProcessBuilder pb = new ProcessBuilder("C:\\666_sdk\\yt-dlp", "--dump-json", "--skip-download", url);
         pb.redirectErrorStream(true);
         Process process = pb.start();
 
@@ -53,7 +57,7 @@ public class YtDlpExtraUtils {
         String videoId = meta.get("id").asText();
 
         // Output format: /tmp/sublingo/videoID
-        String tempDir = System.getProperty("java.io.tmpdir") + File.separator + "sublingo";
+        String tempDir = youtubePath + File.separator + "sublingo";
         File dir = new File(tempDir);
         if (!dir.exists())
             dir.mkdirs();
@@ -69,7 +73,7 @@ public class YtDlpExtraUtils {
 
         // Cmd: yt-dlp --cookies cookies.txt --js-runtimes node --skip-download
         ProcessBuilder pb = new ProcessBuilder(
-                "yt-dlp",
+                "C:\\666_sdk\\yt-dlp",
                 "--cookies", "C:\\666_sdk\\cookies.txt", // User provided
                 "--js-runtimes", "node", // User provided
                 "--skip-download",
