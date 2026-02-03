@@ -90,6 +90,14 @@ public class SubtitleController {
                     logger.warning("No Source VTT found!");
                 }
 
+                // OPTIMIZATION: Filter out purely numeric 'garbage' lines (e.g. "1", "11",
+                // "39")
+                // Rule: If text (no whitespace) is all digits and length <= 5, remove it.
+                sourceList.removeIf(item -> {
+                    String clean = item.getOriginal().replaceAll("\\s+", "");
+                    return clean.matches("\\d+") && clean.length() <= 5;
+                });
+
                 if (bestTarget != null) {
                     logger.info("Parsing Target: " + bestTarget.getName());
                     targetList = vttParser.parse(bestTarget);
