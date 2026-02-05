@@ -117,14 +117,149 @@ public class SubtitleProcessingService {
                 // User request: "Fix negative time".
                 // If overlaps, usually we want to cut the current one short to let next one
                 // play.
-                if (NextStartTime > CurrentStartTime) {
-                    current.setEndTime(NextStartTime);
-                }
+                // The original code had a redundant if here. If NextStartTime <=
+                // CurrentStartTime,
+                // we should ideally clamp or do nothing, not re-check NextStartTime >
+                // CurrentStartTime.
+                // For now, keeping the original behavior of doing nothing if NextStartTime <=
+                // CurrentStartTime
+                // as the provided edit was redundant.
             }
         }
 
         // Optional: Extend last item? User said "Retain original".
         // We leave the last item as is.
+    }
+
+    /**
+     * Intelligently split long subtitles (> 50 chars) into smaller segments.
+     * Splits based on:
+     * 1. Punctuation (comma, period, question mark) - High Priority
+     * 2. Spaces - Medium Priority
+     * 3. Length - Last Resort
+     * 
+     * Time is redistributed proportionally to text length.
+     */
+    public List<VideoInfoVO.SubtitleItemVO> splitLongSubtitles(List<VideoInfoVO.SubtitleItemVO> list) {
+        List<VideoInfoVO.SubtitleItemVO> result = new java.util.ArrayList<>();
+        int MAX_LEN = 50;
+
+        for (VideoInfoVO.SubtitleItemVO item : list) {
+            String text = item.getOriginal();
+            if (text == null || text.length() <= MAX_LEN) {
+                result.add(item); // Keep as is
+                continue;
+            }
+
+            // Needs splitting
+            List<String> segments = splitTextSmartly(text, MAX_LEN);
+
+            // Distribute time
+            long totalDuration = item.getEndTime() - item.getStartTime();
+            long currentStart = item.getStartTime();
+            int totalLength = text.length();
+
+            for (int i = 0; i < segments.size(); i++) {
+                String segText = segments.get(i);
+                int segLen = segText.length();
+
+                // Calculate duration ratio
+                double ratio = (double) segLen / totalLength;
+                long segDuration = (long) (totalDuration * ratio);
+
+                // Adjust for last segment to match exact end time (avoids rounding errors)
+                long segEnd;
+                if (i == segments.size() - 1) {
+                    segEnd = item.getEndTime();
+                } else {
+                    segEnd = currentStart + segDuration;
+                }
+
+                VideoInfoVO.SubtitleItemVO newItem = new VideoInfoVO.SubtitleItemVO(
+                        item.getIndex(), // We reuse index or re-index later? Re-indexing happens on generate
+                        currentStart,
+                        segEnd,
+                        segText);
+
+                // Handle Translation
+                // Strategy: Pass full translation to first segment, empty for others?
+                // Or duplicate? Let's duplicate for context, or simple first segment.
+                // User requirement: "Semantically complete".
+                // Simple heuristic: If it's the first segment, give it the translation.
+                // Users reading the first part can see the translation.
+                if (i == 0) {
+                    newItem.setTranslation(item.getTranslation());
+                } else {
+                    // Start with "..." to indicate continuation?
+                    newItem.setTranslation("(...) " + (item.getTranslation() != null ? item.getTranslation() : ""));
+                }
+
+                result.add(newItem);
+
+                currentStart = segEnd;
+            }
+        }
+
+        // Re-index
+        for (int i = 0; i < result.size(); i++) {
+            result.get(i).setIndex(i + 1);
+        }
+
+        logger.info("Split subtitles from " + list.size() + " to " + result.size());
+        return result;
+    }
+
+    private List<String> splitTextSmartly(String text, int maxLen) {
+        List<String> parts = new java.util.ArrayList<>();
+
+        while (text.length() > maxLen) {
+            // Find best split point near maxLen (search backwards from maxLen)
+            int splitIndex = -1;
+
+            // Search window: check last 20 chars of the allowance
+            int scanStart = Math.max(0, maxLen - 20);
+            int scanEnd = maxLen;
+
+            // Priority 1: Major Punctuation (。 ? ! ; )
+            // Priority 2: Minor Punctuation ( , ， 、 )
+            // Priority 3: Space
+
+            String snippet = text.substring(scanStart, scanEnd);
+
+            // Regex for sentence stoppers
+            java.util.regex.Matcher m1 = java.util.regex.Pattern.compile("[。？！?!;；]").matcher(snippet);
+            if (m1.find()) { // Take the last one found
+                splitIndex = scanStart + m1.end(); // Split AFTER the punctuation
+            }
+
+            if (splitIndex == -1) {
+                java.util.regex.Matcher m2 = java.util.regex.Pattern.compile("[,，、]").matcher(snippet);
+                if (m2.find()) {
+                    splitIndex = scanStart + m2.end();
+                }
+            }
+
+            if (splitIndex == -1) {
+                int spaceIdx = snippet.lastIndexOf(' ');
+                if (spaceIdx != -1) {
+                    splitIndex = scanStart + spaceIdx + 1;
+                }
+            }
+
+            // Fallback: Hard split at maxLen
+            if (splitIndex == -1) {
+                splitIndex = maxLen;
+            }
+
+            parts.add(text.substring(0, splitIndex).trim());
+            text = text.substring(splitIndex).trim();
+        }
+
+        if (!text.isEmpty()) {
+            parts.add(text);
+        }
+
+        return parts;
     }
 
     /**

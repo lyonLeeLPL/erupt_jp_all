@@ -64,13 +64,16 @@ public class SubtitleService {
 
             // 6. Generate & Save Result
             if (!sourceList.isEmpty()) {
-                // OPTIMIZATION: Extend end times to fill gaps
-                processingService.fillTimelineGaps(sourceList);
+                // OPTIMIZATION 1: Split long subtitles
+                List<VideoInfoVO.SubtitleItemVO> processedList = processingService.splitLongSubtitles(sourceList);
 
-                String mergedContent = processingService.generateSrtContent(sourceList);
+                // OPTIMIZATION 2: Extend end times to fill gaps (on the split list)
+                processingService.fillTimelineGaps(processedList);
+
+                String mergedContent = processingService.generateSrtContent(processedList);
                 subtitleFileService.saveMergedSrt(videoId, mergedContent);
                 vo.setRawVtt(mergedContent); // Actually SRT now
-                vo.setSubtitles(sourceList); // JSON list structure is same
+                vo.setSubtitles(processedList); // Use processed list for response
             } else {
                 vo.setSubtitles(new ArrayList<>());
             }
