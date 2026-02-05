@@ -154,48 +154,39 @@ public class SubtitleProcessingService {
             // Needs splitting
             List<String> segments = splitTextSmartly(text, MAX_LEN);
 
-            // Distribute time
+            // Distribute time EQUALLY (Per User Request)
             long totalDuration = item.getEndTime() - item.getStartTime();
             long currentStart = item.getStartTime();
-            int totalLength = text.length();
+            int segmentCount = segments.size();
+            long durationPerSegment = totalDuration / segmentCount;
 
             for (int i = 0; i < segments.size(); i++) {
                 String segText = segments.get(i);
-                int segLen = segText.length();
 
-                // Calculate duration ratio
-                double ratio = (double) segLen / totalLength;
-                long segDuration = (long) (totalDuration * ratio);
-
-                // Adjust for last segment to match exact end time (avoids rounding errors)
+                // Calculate end time for this segment
                 long segEnd;
                 if (i == segments.size() - 1) {
-                    segEnd = item.getEndTime();
+                    segEnd = item.getEndTime(); // Secure exact end time for last segment
                 } else {
-                    segEnd = currentStart + segDuration;
+                    segEnd = currentStart + durationPerSegment;
                 }
 
                 VideoInfoVO.SubtitleItemVO newItem = new VideoInfoVO.SubtitleItemVO(
-                        item.getIndex(), // We reuse index or re-index later? Re-indexing happens on generate
+                        item.getIndex(),
                         currentStart,
                         segEnd,
                         segText);
 
                 // Handle Translation
-                // Strategy: Pass full translation to first segment, empty for others?
-                // Or duplicate? Let's duplicate for context, or simple first segment.
-                // User requirement: "Semantically complete".
-                // Simple heuristic: If it's the first segment, give it the translation.
-                // Users reading the first part can see the translation.
                 if (i == 0) {
                     newItem.setTranslation(item.getTranslation());
                 } else {
-                    // Start with "..." to indicate continuation?
                     newItem.setTranslation("(...) " + (item.getTranslation() != null ? item.getTranslation() : ""));
                 }
 
                 result.add(newItem);
 
+                // Advance start time
                 currentStart = segEnd;
             }
         }
