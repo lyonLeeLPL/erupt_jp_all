@@ -2,11 +2,13 @@ package com.example.demo.utils;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.jetbrains.annotations.NotNull;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.concurrent.TimeUnit;
 
@@ -20,9 +22,7 @@ public class YtDlpExtraUtils {
     public JsonNode getVideoInfo(String url) throws Exception {
 
         // Command: yt-dlp --dump-json --skip-download [url]
-        ProcessBuilder pb = new ProcessBuilder("C:\\666_sdk\\yt-dlp", "--dump-json", "--skip-download", url);
-        pb.redirectErrorStream(true);
-        Process process = pb.start();
+        Process process = getProcess(new ProcessBuilder("C:\\666_sdk\\yt-dlp", "--dump-json", "--skip-download", url));
 
         StringBuilder jsonOutput = new StringBuilder();
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
@@ -66,26 +66,24 @@ public class YtDlpExtraUtils {
         String outputTemplate = tempDir + File.separator + videoId + ".%(ext)s";
 
         // Check if file already exists
-        File expectedFile = new File(tempDir, videoId + ".ja.vtt");
+        File expectedFile = new File(tempDir, videoId + ".ja.srt");
         if (expectedFile.exists()) {
             return expectedFile;
         }
 
         // Cmd: yt-dlp --cookies cookies.txt --js-runtimes node --skip-download
-        ProcessBuilder pb = new ProcessBuilder(
-                "C:\\666_sdk\\yt-dlp",
+        // Cmd: yt-dlp --cookies cookies.txt --js-runtimes node --skip-download
+        Process process = getProcess(new ProcessBuilder(
+                "C:\\666_sdk\\yt-dlp.exe",
                 "--cookies", "C:\\666_sdk\\cookies.txt", // User provided
                 "--js-runtimes", "node", // User provided
                 "--skip-download",
                 "--write-sub",
                 "--write-auto-sub",
+                "--sub-format", "srt", // Force convert to SRT
                 "--sub-lang", "zh-Hans,ja", // Try English, fallback to Japanese
-                "--sub-format", "vtt",
                 "-o", outputTemplate,
-                url);
-
-        pb.redirectErrorStream(true);
-        Process process = pb.start();
+                url));
 
         // Consume output to prevent blocking
         BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
@@ -96,19 +94,27 @@ public class YtDlpExtraUtils {
 
         process.waitFor(60, TimeUnit.SECONDS);
 
-        // Find the file. yt-dlp appends language code, e.g. videoID.en.vtt
-        File vttFile = new File(tempDir, videoId + ".ja.vtt");
-        if (vttFile.exists())
-            return vttFile;
+        // Find the file. yt-dlp appends language code, e.g. videoID.en.srt
+        File srtFile = new File(tempDir, videoId + ".ja.srt");
+        if (srtFile.exists())
+            return srtFile;
 
         // Try other variations usually produced by yt-dlp
-        // Sometimes it's videoID.vtt if language is implicit? strictly it appends lang.
-        // Check for ANY .vtt file starting with videoId
-        File[] validFiles = dir.listFiles((d, name) -> name.startsWith(videoId) && name.endsWith(".vtt"));
+        // Check for ANY .srt file starting with videoId
+        File[] validFiles = dir.listFiles((d, name) -> name.startsWith(videoId) && name.endsWith(".srt"));
         if (validFiles != null && validFiles.length > 0) {
             return validFiles[0];
         }
 
         return null;
+    }
+
+    @NotNull
+    private static Process getProcess(ProcessBuilder outputTemplate) throws IOException {
+        ProcessBuilder pb = outputTemplate;
+
+        pb.redirectErrorStream(true);
+        Process process = pb.start();
+        return process;
     }
 }

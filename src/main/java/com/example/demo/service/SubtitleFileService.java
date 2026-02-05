@@ -11,7 +11,7 @@ import java.util.logging.Logger;
 
 /**
  * Service for File I/O related to Subtitles
- * - Scanning directory
+ * - Scanning directory for SRT files
  * - Identification of Source/Target files
  * - Saving generated files
  */
@@ -51,7 +51,7 @@ public class SubtitleFileService {
     }
 
     /**
-     * Scan directory to find the best matching source and target VTT files for a
+     * Scan directory to find the best matching source and target SRT files for a
      * videoId.
      */
     public SubtitleFilesDTO findSubtitleFiles(String videoId) {
@@ -60,7 +60,8 @@ public class SubtitleFileService {
             return new SubtitleFilesDTO(null, null);
         }
 
-        File[] files = dir.listFiles((d, name) -> name.startsWith(videoId) && name.endsWith(".vtt"));
+        // Look for .srt files
+        File[] files = dir.listFiles((d, name) -> name.startsWith(videoId) && name.endsWith(".srt"));
 
         File bestSource = null;
         File bestTarget = null;
@@ -69,17 +70,17 @@ public class SubtitleFileService {
             for (File f : files) {
                 String name = f.getName();
 
-                // Extract lang code: videoId.LANG.vtt
+                // Extract lang code: videoId.LANG.srt
                 // Be careful with substrings
                 if (name.length() <= videoId.length() + 4)
-                    continue; // safety for ".vtt"
+                    continue; // safety for ".srt"
 
                 String suffix = name.substring(videoId.length());
                 if (suffix.startsWith("."))
                     suffix = suffix.substring(1);
-                String lang = suffix.replace(".vtt", "").toLowerCase();
+                String lang = suffix.replace(".srt", "").toLowerCase();
 
-                logger.info("Found VTT: " + name + " (Lang: " + lang + ")");
+                logger.info("Found SRT: " + name + " (Lang: " + lang + ")");
 
                 // Strategy Source: Japanese (ja) > English (en)
                 if (lang.startsWith("ja")) {
@@ -100,16 +101,16 @@ public class SubtitleFileService {
     }
 
     /**
-     * Write string content to a new VTT file
+     * Write string content to a new SRT file
      */
-    public void saveMergedVtt(String videoId, String content) {
+    public void saveMergedSrt(String videoId, String content) {
         File dir = getSubtitleDir();
-        File mergedFile = new File(dir, videoId + ".merged.vtt");
+        File mergedFile = new File(dir, videoId + ".merged.srt");
         try {
             Files.writeString(mergedFile.toPath(), content, StandardCharsets.UTF_8);
-            logger.info("Saved Merged VTT to: " + mergedFile.getAbsolutePath());
+            logger.info("Saved Merged SRT to: " + mergedFile.getAbsolutePath());
         } catch (IOException e) {
-            logger.warning("Failed to save merged VTT: " + e.getMessage());
+            logger.warning("Failed to save merged SRT: " + e.getMessage());
             e.printStackTrace();
         }
     }

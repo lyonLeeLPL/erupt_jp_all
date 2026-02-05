@@ -1,7 +1,7 @@
 package com.example.demo.service;
 
 import com.example.demo.model.subtitle.VideoInfoVO;
-import com.example.demo.utils.VttParser;
+import com.example.demo.utils.SrtParser;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -11,10 +11,10 @@ import java.util.logging.Logger;
 
 /**
  * Service specifically for Processing Subtitle Logic
- * - Parsing
+ * - Parsing (SRT)
  * - Filtering (Garbage removal)
  * - Merging (Dual language alignment)
- * - Generation (VTT Formatting)
+ * - Generation (SRT Formatting)
  */
 @Service
 public class SubtitleProcessingService {
@@ -22,17 +22,17 @@ public class SubtitleProcessingService {
     private static final Logger logger = Logger.getLogger(SubtitleProcessingService.class.getName());
 
     @Autowired
-    private VttParser vttParser;
+    private SrtParser srtParser;
 
     /**
-     * Parse VTT file and filter out garbage lines
+     * Parse SRT file and filter out garbage lines
      */
     public List<VideoInfoVO.SubtitleItemVO> parseAndFilter(File file) {
         if (file == null || !file.exists()) {
             return new java.util.ArrayList<>();
         }
 
-        List<VideoInfoVO.SubtitleItemVO> list = vttParser.parse(file);
+        List<VideoInfoVO.SubtitleItemVO> list = srtParser.parse(file);
 
         // Filter Logic:
         // 1. Numeric noise (<= 5 digits)
@@ -87,27 +87,68 @@ public class SubtitleProcessingService {
     }
 
     /**
-     * Generate standard WEBVTT string from subtitle list
+     * Rewrite subtitle end times to fill gaps between segments.
+     * Rule: Current Subtitle End Time = Next Subtitle Start Time.
+     * Prevents flickering and ensures continuous playback.
      */
-    public String generateVttContent(List<VideoInfoVO.SubtitleItemVO> list) {
-        StringBuilder vttBuilder = new StringBuilder();
-        vttBuilder.append("WEBVTT\n\n");
+    public void fillTimelineGaps(List<VideoInfoVO.SubtitleItemVO> list) {
+        if (list == null || list.size() < 2) {
+            return;
+        }
+
+        logger.info("Optimizing timeline for " + list.size() + " items...");
+
+        for (int i = 0; i < list.size() - 1; i++) {
+            VideoInfoVO.SubtitleItemVO current = list.get(i);
+            VideoInfoVO.SubtitleItemVO next = list.get(i + 1);
+
+            long NextStartTime = next.getStartTime();
+            long CurrentStartTime = current.getStartTime();
+
+            // Safety Check: Ensure we don't create invalid duration
+            if (NextStartTime > CurrentStartTime) {
+                current.setEndTime(NextStartTime);
+            } else {
+                // Next starts before current?? (Overlap or Sort error)
+                // In this case, just keep original end time or clamp to next start?
+                // Safer: Math.max(current.getEndTime(), NextStartTime) might be wrong if next
+                // is fully inside.
+                // Simple Fix: do nothing if invalid, or clamp if overlapping?
+                // User request: "Fix negative time".
+                // If overlaps, usually we want to cut the current one short to let next one
+                // play.
+                if (NextStartTime > CurrentStartTime) {
+                    current.setEndTime(NextStartTime);
+                }
+            }
+        }
+
+        // Optional: Extend last item? User said "Retain original".
+        // We leave the last item as is.
+    }
+
+    /**
+     * Generate standard SRT string from subtitle list
+     */
+    public String generateSrtContent(List<VideoInfoVO.SubtitleItemVO> list) {
+        StringBuilder srtBuilder = new StringBuilder();
+        // SRT does not have a header like WEBVTT
 
         for (VideoInfoVO.SubtitleItemVO item : list) {
-            vttBuilder.append(item.getIndex()).append("\n");
-            vttBuilder.append(formatTime(item.getStartTime()))
+            srtBuilder.append(item.getIndex()).append("\n");
+            srtBuilder.append(formatTime(item.getStartTime()))
                     .append(" --> ")
                     .append(formatTime(item.getEndTime()))
                     .append("\n");
 
-            vttBuilder.append(item.getOriginal()).append("\n");
+            srtBuilder.append(item.getOriginal()).append("\n");
 
             if (item.getTranslation() != null && !item.getTranslation().isEmpty()) {
-                vttBuilder.append(item.getTranslation()).append("\n");
+                srtBuilder.append(item.getTranslation()).append("\n");
             }
-            vttBuilder.append("\n");
+            srtBuilder.append("\n");
         }
-        return vttBuilder.toString();
+        return srtBuilder.toString();
     }
 
     private String formatTime(long totalMs) {
@@ -115,6 +156,7 @@ public class SubtitleProcessingService {
         long m = (totalMs % 3600000) / 60000;
         long s = (totalMs % 60000) / 1000;
         long ms = totalMs % 1000;
-        return String.format("%02d:%02d:%02d.%03d", h, m, s, ms);
+        // SRT uses comma and dot for seconds, standard SRT is comma 00:00:00,000
+        return String.format("%02d:%02d:%02d,%03d", h, m, s, ms);
     }
 }

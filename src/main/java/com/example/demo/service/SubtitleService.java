@@ -41,7 +41,11 @@ public class SubtitleService {
             vo.setDuration(meta.get("duration").asLong());
 
             // 2. Trigger Download (Creates files in temp dir)
-            ytDlpUtils.downloadSubtitle(url, meta);
+            try {
+                ytDlpUtils.downloadSubtitle(url, meta);
+            } catch (Exception e) {
+                logger.warning("Download warning: " + e.getMessage());
+            }
 
             // 3. Find Subtitle Files on Disk
             SubtitleFileService.SubtitleFilesDTO files = subtitleFileService.findSubtitleFiles(videoId);
@@ -60,15 +64,18 @@ public class SubtitleService {
 
             // 6. Generate & Save Result
             if (!sourceList.isEmpty()) {
-                String mergedContent = processingService.generateVttContent(sourceList);
-                subtitleFileService.saveMergedVtt(videoId, mergedContent);
-                vo.setRawVtt(mergedContent);
-                vo.setSubtitles(sourceList);
+                // OPTIMIZATION: Extend end times to fill gaps
+                processingService.fillTimelineGaps(sourceList);
+
+                String mergedContent = processingService.generateSrtContent(sourceList);
+                subtitleFileService.saveMergedSrt(videoId, mergedContent);
+                vo.setRawVtt(mergedContent); // Actually SRT now
+                vo.setSubtitles(sourceList); // JSON list structure is same
             } else {
                 vo.setSubtitles(new ArrayList<>());
             }
 
-            vo.setTranslationVtt(null); // No longer needed as separate field
+            vo.setTranslationVtt(null);
 
         } catch (Exception e) {
             logger.severe("Error in SubtitleService: " + e.getMessage());
