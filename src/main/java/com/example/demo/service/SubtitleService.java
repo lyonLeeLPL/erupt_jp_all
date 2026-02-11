@@ -64,10 +64,13 @@ public class SubtitleService {
 
             // 6. Generate & Save Result
             if (!sourceList.isEmpty()) {
-                // OPTIMIZATION 1: Split long subtitles
-                List<VideoInfoVO.SubtitleItemVO> processedList = processingService.splitLongSubtitles(sourceList);
+                // STRATEGY 0: Merge Auxiliary/Noise subtitles first
+                List<VideoInfoVO.SubtitleItemVO> mergedList = processingService.mergeAuxiliarySubtitles(sourceList);
 
-                // OPTIMIZATION 2: Extend end times to fill gaps (on the split list)
+                // STRATEGY 1: Split long subtitles
+                List<VideoInfoVO.SubtitleItemVO> processedList = processingService.splitLongSubtitles(mergedList);
+
+                // STRATEGY 2: Extend end times to fill gaps (on the split list)
                 processingService.fillTimelineGaps(processedList);
 
                 String mergedContent = processingService.generateSrtContent(processedList);
@@ -86,5 +89,9 @@ public class SubtitleService {
             throw new RuntimeException("Error processing video: " + e.getMessage());
         }
         return vo;
+    }
+
+    public java.io.File getSubtitleFile(String videoId, String type) {
+        return subtitleFileService.getSubtitleFile(videoId, type);
     }
 }

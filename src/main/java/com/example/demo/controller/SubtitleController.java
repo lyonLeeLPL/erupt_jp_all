@@ -28,4 +28,24 @@ public class SubtitleController {
         logger.info("Successfully processed video: " + vo.getTitle());
         return vo;
     }
+
+    @GetMapping("/subtitle/download")
+    public org.springframework.http.ResponseEntity<org.springframework.core.io.Resource> downloadSubtitle(
+            @RequestParam("videoId") String videoId,
+            @RequestParam("type") String type) {
+
+        java.io.File file = subtitleService.getSubtitleFile(videoId, type);
+
+        if (file == null || !file.exists()) {
+            return org.springframework.http.ResponseEntity.notFound().build();
+        }
+
+        org.springframework.core.io.Resource resource = new org.springframework.core.io.FileSystemResource(file);
+
+        return org.springframework.http.ResponseEntity.ok()
+                .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"" + file.getName() + "\"")
+                .contentType(org.springframework.http.MediaType.parseMediaType("application/x-subrip"))
+                .body(resource);
+    }
 }

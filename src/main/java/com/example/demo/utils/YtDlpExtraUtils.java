@@ -22,7 +22,7 @@ public class YtDlpExtraUtils {
     public JsonNode getVideoInfo(String url) throws Exception {
 
         // Command: yt-dlp --dump-json --skip-download [url]
-        Process process = getProcess(new ProcessBuilder("C:\\666_sdk\\yt-dlp", "--dump-json", "--skip-download", url));
+        Process process = getProcess(new ProcessBuilder("C:\\666_sdk\\yt-dlp.exe", "--dump-json", "--skip-download", url));
 
         StringBuilder jsonOutput = new StringBuilder();
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {

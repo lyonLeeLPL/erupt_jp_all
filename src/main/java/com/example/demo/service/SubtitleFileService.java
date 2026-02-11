@@ -101,6 +101,29 @@ public class SubtitleFileService {
     }
 
     /**
+     * Retrieve subtitle file by type
+     * 
+     * @param type "source" (JA/Original) or "merged" (Processed)
+     */
+    public File getSubtitleFile(String videoId, String type) {
+        SubtitleFilesDTO files = findSubtitleFiles(videoId);
+
+        if ("source".equalsIgnoreCase(type)) {
+            return files.getSource();
+        } else if ("merged".equalsIgnoreCase(type)) {
+            // First check for the .merged.srt we generated
+            File dir = getSubtitleDir();
+            File merged = new File(dir, videoId + ".merged.srt");
+            if (merged.exists())
+                return merged;
+
+            // Fallback?
+            return null;
+        }
+        return null;
+    }
+
+    /**
      * Write string content to a new SRT file
      */
     public void saveMergedSrt(String videoId, String content) {
